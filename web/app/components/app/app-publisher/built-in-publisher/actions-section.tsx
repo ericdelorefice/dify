@@ -9,7 +9,7 @@ type PublisherActionsSectionProps = Pick<
   AppPublisherProps,
   'hasTriggerNode' | 'publishedAt' | 'toolPublished' | 'workflowToolAvailable'
 > & {
-  appId?: string
+  appId: string
   appURL: string
   canViewAccessPoint: boolean
   disabledFunctionButton: boolean
@@ -55,8 +55,7 @@ export function PublisherActionsSection({
 
   const hasPublishedVersion = Boolean(publishedAt)
   const showOpenWebApp = !hasTriggerNode
-  const showDeploy = Boolean(showDeployAction && appId)
-  const navigationDisabled = !hasPublishedVersion || !appId
+  const navigationDisabled = !hasPublishedVersion
   const workflowToolDisabled =
     !hasPublishedVersion || !workflowToolAvailable || (toolPublished && workflowToolIsLoading)
 
@@ -106,13 +105,13 @@ export function PublisherActionsSection({
         <SuggestedAction
           disabled={navigationDisabled}
           description={t(($) => $['common.accessPointDescription'], { ns: 'workflow' })}
-          link={appId ? `/app/${appId}/access-point` : undefined}
+          link={`/app/${appId}/access-point`}
           icon={<span className="i-custom-vender-agent-v2-access-point size-4" />}
         >
           {t(($) => $['appMenus.accessPoint'], { ns: 'common' })}
         </SuggestedAction>
       )}
-      {showDeploy && (
+      {showDeployAction && (
         <SuggestedAction
           disabled={navigationDisabled}
           description={t(($) => $['common.deployDescription'], { ns: 'workflow' })}

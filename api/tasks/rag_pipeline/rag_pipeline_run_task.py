@@ -15,15 +15,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from configs import dify_config
+from core.app.apps.pipeline.pipeline_generator import PipelineGenerator
 from core.app.entities.app_invoke_entities import InvokeFrom, RagPipelineGenerateEntity
 from core.app.entities.rag_pipeline_invoke_entities import RagPipelineInvokeEntity
+from core.db.session_factory import get_session_maker
 from core.rag.pipeline.queue import TenantIsolatedTaskQueue
 from core.repositories.factory import DifyCoreRepositoryFactory
+from extensions.application_services.data_sources import build_data_source_credentials
 from extensions.ext_database import db
 from models import Account, Tenant
 from models.dataset import Pipeline
 from models.enums import WorkflowRunTriggeredFrom
 from models.workflow import Workflow, WorkflowNodeExecutionTriggeredFrom
+from repositories.knowledge.document_repository import SQLAlchemyDocumentRepository
 from services.file_service import FileService
 from services.workflow_run_agg import WorkflowRunAgg
 
@@ -185,9 +189,12 @@ def run_single_rag_pipeline_task(rag_pipeline_invoke_entity: Mapping[str, Any], 
 
                 # Direct execution without creating another thread
                 # Since we're already in a thread pool, no need for nested threading
-                from core.app.apps.pipeline.pipeline_generator import PipelineGenerator
 
-                pipeline_generator = PipelineGenerator(execution_driver=WorkflowRunAgg.run)
+                pipeline_generator = PipelineGenerator(
+                    execution_driver=WorkflowRunAgg.run,
+                    documents=SQLAlchemyDocumentRepository(session_factory=session_factory),
+                    datasource_providers=build_data_source_credentials(database_client=get_session_maker()).providers,
+                )
                 # Using protected method intentionally for async execution
                 pipeline_generator._generate(  # type: ignore[attr-defined]
                     session=session,
