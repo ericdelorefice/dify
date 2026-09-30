@@ -19,7 +19,7 @@ import pytest
 from pytest_mock import MockerFixture
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 import core.app.apps.pipeline.pipeline_runner as module
 from core.app.apps.pipeline.pipeline_runner import PipelineRunner
@@ -30,6 +30,7 @@ from models.dataset import Dataset, Document, Pipeline
 from models.enums import DocumentCreatedFrom
 from models.model import EndUser
 from models.workflow import Workflow, WorkflowType
+from repositories.knowledge.document_repository import SQLAlchemyDocumentRepository
 from tests.unit_tests.model_factories import make_dataset, make_document, make_end_user, make_workflow
 
 
@@ -118,13 +119,11 @@ def _build_app_generate_entity() -> SimpleNamespace:
 
 
 @pytest.fixture
-def runner():
+def runner(sqlite_engine: Engine):
     app_generate_entity = _build_app_generate_entity()
     queue_manager = MagicMock()
     variable_loader = MagicMock()
     workflow = _workflow()
-    workflow_execution_repository = MagicMock()
-    workflow_node_execution_repository = MagicMock()
 
     return PipelineRunner(
         application_generate_entity=app_generate_entity,
@@ -132,6 +131,7 @@ def runner():
         variable_loader=variable_loader,
         workflow=workflow,
         system_user_id="sys",
+        documents=SQLAlchemyDocumentRepository(session_factory=sessionmaker(bind=sqlite_engine)),
     )
 
 
@@ -195,12 +195,15 @@ def test_init_rag_pipeline_graph_honors_canonical_root_ownership(runner):
 def test_update_document_status_on_failure(runner, sqlite_session: Session):
     document = _document()
     _, dataset, _ = _persist_scope(sqlite_session, documents=(document,))
-    dataset_ref = module.DatasetRefService.create_dataset_ref(dataset)
-    document_ref = module.DatasetRefService.create_document_ref_from_id(dataset_ref, document.id)
 
     event = GraphRunFailedEvent(error="boom")
 
-    runner._update_document_status(event, document_ref)
+    runner._update_document_status(
+        event,
+        workspace_id=dataset.tenant_id,
+        dataset_id=dataset.id,
+        document_id=document.id,
+    )
 
     sqlite_session.expire_all()
     updated = sqlite_session.get(Document, document.id)
@@ -211,10 +214,13 @@ def test_update_document_status_on_failure(runner, sqlite_session: Session):
 
 def test_update_document_status_skips_when_document_not_found(runner, sqlite_session: Session):
     _, dataset, _ = _persist_scope(sqlite_session)
-    dataset_ref = module.DatasetRefService.create_dataset_ref(dataset)
-    document_ref = module.DatasetRefService.create_document_ref_from_id(dataset_ref, "missing")
 
-    runner._update_document_status(GraphRunFailedEvent(error="boom"), document_ref)
+    runner._update_document_status(
+        GraphRunFailedEvent(error="boom"),
+        workspace_id=dataset.tenant_id,
+        dataset_id=dataset.id,
+        document_id="missing",
+    )
 
     assert sqlite_session.get(Document, "missing") is None
 
@@ -228,14 +234,19 @@ def test_update_document_status_skips_without_document_ref(runner, sqlite_engine
 
     event.listen(sqlite_engine, "checkout", record_checkout)
     try:
-        runner._update_document_status(GraphRunFailedEvent(error="boom"), None)
+        runner._update_document_status(
+            GraphRunFailedEvent(error="boom"),
+            workspace_id="workspace-1",
+            dataset_id="dataset-1",
+            document_id=None,
+        )
     finally:
         event.remove(sqlite_engine, "checkout", record_checkout)
 
     assert checkouts == 0
 
 
-def test_run_pipeline_not_found():
+def test_run_pipeline_not_found(sqlite_engine: Engine):
     app_generate_entity = _build_app_generate_entity()
     app_generate_entity.invoke_from = InvokeFrom.WEB_APP
     app_generate_entity.single_iteration_run = None
@@ -247,6 +258,7 @@ def test_run_pipeline_not_found():
         variable_loader=MagicMock(),
         workflow=_workflow(),
         system_user_id="sys",
+        documents=SQLAlchemyDocumentRepository(session_factory=sessionmaker(bind=sqlite_engine)),
     )
 
     with pytest.raises(ValueError):
@@ -318,7 +330,7 @@ def test_run_rejects_original_document_outside_pipeline_dataset_after_async_boun
     runner.get_workflow.assert_not_called()
 
 
-def test_run_workflow_not_initialized(sqlite_session: Session):
+def test_run_workflow_not_initialized(sqlite_session: Session, sqlite_engine: Engine):
     app_generate_entity = _build_app_generate_entity()
 
     pipeline = _pipeline()
@@ -333,18 +345,17 @@ def test_run_workflow_not_initialized(sqlite_session: Session):
         variable_loader=MagicMock(),
         workflow=_workflow(),
         system_user_id="sys",
+        documents=SQLAlchemyDocumentRepository(session_factory=sessionmaker(bind=sqlite_engine)),
     )
     with pytest.raises(ValueError):
         runner.prepare()
 
 
-def test_run_single_iteration_path(mocker: MockerFixture, sqlite_session: Session):
+def test_run_single_iteration_path(mocker: MockerFixture, sqlite_session: Session, sqlite_engine: Engine):
     app_generate_entity = _build_app_generate_entity()
     app_generate_entity.single_iteration_run = MagicMock()
 
     _, dataset, _ = _persist_scope(sqlite_session, documents=(_document(),))
-    dataset_ref = module.DatasetRefService.create_dataset_ref(dataset)
-    document_ref = module.DatasetRefService.create_document_ref_from_id(dataset_ref, "doc")
 
     runner = PipelineRunner(
         application_generate_entity=app_generate_entity,
@@ -352,6 +363,7 @@ def test_run_single_iteration_path(mocker: MockerFixture, sqlite_session: Sessio
         variable_loader=MagicMock(),
         workflow=_workflow(),
         system_user_id="sys",
+        documents=SQLAlchemyDocumentRepository(session_factory=sessionmaker(bind=sqlite_engine)),
     )
 
     runner._resolve_user_from = MagicMock(return_value=UserFrom.ACCOUNT)
@@ -367,12 +379,19 @@ def test_run_single_iteration_path(mocker: MockerFixture, sqlite_session: Sessio
     workflow_entry.run.return_value = [event]
     mocker.patch.object(module, "WorkflowEntry", return_value=workflow_entry)
 
+    handle_event = mocker.patch.object(module.WorkflowBasedAppRunner, "handle_event")
     prepared = runner.prepare()
     assert prepared is not None
     runner.handle_event(prepared.entry, event)
 
+    handle_event.assert_called_once_with(prepared.entry, event)
     runner._prepare_single_node_execution.assert_called_once()
-    runner._update_document_status.assert_called_once_with(event, document_ref)
+    runner._update_document_status.assert_called_once_with(
+        event,
+        workspace_id=dataset.tenant_id,
+        dataset_id=dataset.id,
+        document_id="doc",
+    )
 
 
 def test_run_normal_path_builds_graph(mocker: MockerFixture, sqlite_session: Session, sqlite_engine: Engine):
@@ -402,6 +421,7 @@ def test_run_normal_path_builds_graph(mocker: MockerFixture, sqlite_session: Ses
         variable_loader=MagicMock(),
         workflow=workflow,
         system_user_id="sys",
+        documents=SQLAlchemyDocumentRepository(session_factory=sessionmaker(bind=sqlite_engine)),
     )
 
     runner._resolve_user_from = MagicMock(return_value=UserFrom.ACCOUNT)
