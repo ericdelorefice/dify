@@ -509,10 +509,8 @@ describe('app-publisher sections', () => {
 
     render(
       <PublisherActionsSection
-        appDetail={{
-          id: 'workflow-app',
-          mode: AppModeEnum.WORKFLOW,
-        }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton={false}
@@ -567,10 +565,8 @@ describe('app-publisher sections', () => {
 
     render(
       <PublisherActionsSection
-        appDetail={{
-          id: 'workflow-app',
-          mode: AppModeEnum.WORKFLOW,
-        }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton={false}
@@ -600,10 +596,8 @@ describe('app-publisher sections', () => {
 
   it('should show the disabled reason for setup and configured workflow tool actions', () => {
     const commonProps = {
-      appDetail: {
-        id: 'workflow-app',
-        mode: AppModeEnum.WORKFLOW,
-      },
+      appId: 'workflow-app',
+      appMode: AppModeEnum.WORKFLOW,
       appURL: 'https://example.com/app',
       canViewAccessPoint: true,
       disabledFunctionButton: false,
@@ -636,10 +630,8 @@ describe('app-publisher sections', () => {
     const user = userEvent.setup()
     const onConfigureWorkflowTool = vi.fn()
     const commonProps = {
-      appDetail: {
-        id: 'workflow-app',
-        mode: AppModeEnum.WORKFLOW,
-      },
+      appId: 'workflow-app',
+      appMode: AppModeEnum.WORKFLOW,
       appURL: 'https://example.com/app',
       canViewAccessPoint: true,
       disabledFunctionButton: false,
@@ -682,10 +674,8 @@ describe('app-publisher sections', () => {
   it('should keep Access Point and Deploy available for trigger workflows', () => {
     render(
       <PublisherActionsSection
-        appDetail={{
-          id: 'trigger-app',
-          mode: AppModeEnum.WORKFLOW,
-        }}
+        appId={'trigger-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton={false}
@@ -714,7 +704,8 @@ describe('app-publisher sections', () => {
   it('should hide the Access Point publisher entry without view permission', () => {
     render(
       <PublisherActionsSection
-        appDetail={{ id: 'workflow-app', mode: AppModeEnum.WORKFLOW }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint={false}
         disabledFunctionButton={false}
@@ -738,7 +729,8 @@ describe('app-publisher sections', () => {
   it('should expose unavailable quick links as disabled buttons before the first publish', () => {
     render(
       <PublisherActionsSection
-        appDetail={{ id: 'workflow-app', mode: AppModeEnum.WORKFLOW }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton
@@ -763,7 +755,8 @@ describe('app-publisher sections', () => {
 
     render(
       <PublisherActionsSection
-        appDetail={{ id: 'workflow-app', mode: AppModeEnum.WORKFLOW }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton
@@ -789,7 +782,8 @@ describe('app-publisher sections', () => {
 
     render(
       <PublisherActionsSection
-        appDetail={{ id: 'workflow-app', mode: AppModeEnum.WORKFLOW }}
+        appId={'workflow-app'}
+        appMode={AppModeEnum.WORKFLOW}
         appURL="https://example.com/app"
         canViewAccessPoint
         disabledFunctionButton
